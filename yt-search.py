@@ -7,15 +7,23 @@ import sys
 import urllib.parse
 from youtrack.connection import Connection as YouTrack
 
-yt_url = "https://youtrack.jetbrains.com"
-yt = YouTrack(yt_url, token="TOKEN")
+# YouTrack configuration
+# https://www.jetbrains.com/help/youtrack/standalone/Manage-Permanent-Token.html#obtain-permanent-token
+auth_token = "TOKEN"
 
+# Project specific configuration
 project_id = "CPP"
-project_single_issue_url = f'{yt_url}/issue'
-project_issues_url = f'{yt_url}/issues/{project_id}?q='
 
-clion_issue_re = re.compile(f"^({project_id}-[0-9]+)")
+# YouTrack URLs
+tracker_url = "https://youtrack.jetbrains.com"
 
+project_single_issue_url = f'{tracker_url}/issue/'
+project_issues_search_url = f'{tracker_url}/issues/{project_id}?q='
+project_issue_re = re.compile(f"^({project_id}-[0-9]+)")
+
+yt = YouTrack(tracker_url, token=auth_token)
+
+# Browser configuration
 browser_path = '/usr/bin/google-chrome-stable'
 
 
@@ -28,7 +36,22 @@ def to_query_string(search_str):
 
 
 def is_single_issue_id(search_str):
-    return re.match(clion_issue_re, search_str)
+    return re.match(project_issue_re, search_str)
+
+
+def print_results(results):
+    for r in results:
+        attrs = r.to_dict()
+        print(f'{attrs["id"]} - {attrs["summary"]}')
+
+
+def get_query_and_url(search_string):
+    m = is_single_issue_id(search_string)
+    if m:
+        query = urllib.parse.quote_plus(m.group(1))
+        return query, project_single_issue_url
+
+    return urllib.parse.quote_plus(search_string), project_issues_search_url
 
 
 def main():
@@ -37,22 +60,13 @@ def main():
     if search_string.endswith('!'):
         query = to_query_string(search_string.rstrip('!').strip())
         results = query_issues(query)
-        for r in results:
-            attrs = r.to_dict()
-            print(f'{attrs["id"]} - {attrs["summary"]}')
+        print_results(results)
     elif search_string == '':
         print('!!-- Type something to search on YouTrack')
         print('!!-- Close your search string with "!" to get suggestions')
     else:
-        m = is_single_issue_id(search_string)
-        if m:
-            search_string = m.group(1)
-            query = urllib.parse.quote_plus(search_string)
-            url = f'{project_single_issue_url}/{query}'
-        else:
-            query = urllib.parse.quote_plus(search_string)
-            url = f'{project_issues_url}{query}'
-
+        (query, base_url) = get_query_and_url(search_string)
+        url = f'{base_url}{query}'
         sp.Popen([browser_path] + [url], stdout=sp.DEVNULL, stderr=sp.DEVNULL, shell=False)
 
 
